@@ -1,88 +1,116 @@
 import React from "react";
-import Info from "./components/info"
-import Form from "./components/form"
-import Weather from "./components/Weather"
-
-const API_KEY = "6a55dd8f5044bbaaf774c52194457de2";
+import Info from "./components/info";
+import Weather from "./components/Weather";
+import { API_GEO_URL, API_WEATHER_URL } from "./utilities/api";
 
 class App extends React.Component {
-
-  state = {
-    temp: undefined,
-    city: undefined,
-    country: undefined,
-    pressure: undefined,
-    sunset: undefined,
-    error: undefined
+  constructor() {
+    super();
+    this.state = {
+      cityForecast: [],
+      error: undefined,
+      position: undefined,
+    };
   }
-  gettingWeather = async (e)=>{
-    e.preventDefault();//Отмена стандартного поведения(перезагрузка страницы)
-    const city = e.target.elements.city.value;//Работа с элементом(Форм)по имени
 
+  componentDidMount() {
+    const sucessfulLookup = (position) => {
+      const { latitude, longitude } = position.coords;
+      fetch(
+        `${API_GEO_URL}?q=${latitude}+${longitude}&key=${process.env.REACT_APP_API_GEO_KEY}`
+      )
+        .then((response) => {
+          return response.json();
+        })
+        .then((data) => {
+          this.setState({
+            position: position.coords,
+          });
 
-
-    if(city) {
-      const api_url = await
-      fetch(`http://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}&units=metric`);﻿
-      const data = await api_url.json();
-      console.log(data);//Выведение данных в консоль для обработки
-
-         var date = new Date(data.sys.sunset*1000);
-          var hours = date.getHours(); // Minutes part from the timestamp
-          var minutes = "0" + date.getMinutes(); // Seconds part from the timestamp
-          var seconds = "0" + date.getSeconds();
-
-
-        var sunset_date = hours + ':' + minutes.substr(-2) + ':' + seconds.substr(-2);
-        let pressure = data.main.pressure * 0.75;
-    this.setState({
-      temp: data.main.temp,
-      city: data.name,
-      country: data.sys.country,
-      pressure: pressure,
-      sunset: sunset_date,
-      error: undefined
-    });
-  }else{
-    this.setState({
-    temp: undefined,
-    city: undefined,
-    country: undefined,
-    pressure: undefined,
-    sunset: undefined,
-    error: "Введите название города"
-  });
+          // console.log("geometry", this.state.position.geometry)
+        })
+        .catch((error) => {
+          console.log(error);
+        });
+    };
+    const errorLookup = (error) => {
+      console.log("label", error);
+      this.setState(
+        {
+          error:
+            "Для корректного виконання програми треба дозволити визначити геолокацію! Обновіть сторінку і дозвольте відстеження",
+        },
+        () => {
+          console.log("this.state.error", this.state.error);
+        }
+      );
+    };
+    navigator.geolocation.getCurrentPosition(sucessfulLookup, errorLookup);
   }
-}
+  componentDidUpdate(position, cityForecast) {
+    if (this.state.position !== position.position) {
+      const { latitude, longitude } = this.state.position;
+      const part = "alerts,hourly,minutely";
+      fetch(
+        `${API_WEATHER_URL}?lat=${latitude}&lon=${longitude}&exclude=${part}&appid=${process.env.REACT_APP_API_KEY}&units=metric`
+      )
+        .then((response) => response.json())
+        .then((data) => {
+          if (this.state.cityForecast === cityForecast.cityForecast) {
+            let temp = [];
+            for (let i = 0; i < data.daily.length; i += 1) {
+              temp.push(data.daily[i]);
+            }
+            this.setState({
+              cityForecast: temp,
+            });
+          }
+        })
+        .catch((error) => {
+          console.log(error);
+          this.setState({
+            error: "Не вдалося завантажити інформацію з сервера!",
+          });
+        });
+    }
+  }
 
-
-  render(){
-    return(
+  render() {
+    return (
       <div className="wrapper">
-      <div className="main">
-        <div className="container">
-          <div className="row">
-          <div className="col-sm-5 info">
-            <Info />
-          </div>
-          <div className="col-sm-7 form">
-          <Form weatherMethod={this.gettingWeather}/>
-          <Weather
-            temp= {this.state.temp}
-            city= {this.state.city}
-            country= {this.state.country}
-            pressure= {this.state.pressure}
-            sunset= {this.state.sunset}
-            error={this.state.error}
-          />
+        <div className="main">
+          <div className="container">
+            <div className="row">
+              <div className="col-sm-5 info">
+                <Info />
+              </div>
+              <div className="col-sm-7 form">
+                <div className="container">
+                  <h3>Дані по погоді на наступні 7 днів.</h3>
+                  <div className="row mt-6">
+                    {this.state.position !== undefined ? (
+                      this.state.cityForecast.map((value, index) => {
+                        return (
+                          <div className="weather-cards" key={index}>
+                            <Weather
+                              cityForecast={value}
+                              error={this.state.error}
+                            />
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="error">{this.state.error}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  </div>
     );
   }
 }
-
 
 export default App;
